@@ -1,8 +1,7 @@
+#include "messages.h"
 #include "network.h"
 #include "parser.h"
 #include "utils.h"
-#include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -26,7 +25,7 @@ int main(int argc, char **argv) {
 
   // set socket timeout
   struct timeval timeout;
-  timeout.tv_sec = 3;
+  timeout.tv_sec = 2;
   timeout.tv_usec = 0;
 
   if (setsockopt(sock_fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) <
@@ -39,35 +38,41 @@ int main(int argc, char **argv) {
     log_exit("Server connection failure");
   }
 
+  // set log level
+  set_log_level(LOG_DEBUG);
+
   // performm operations
-  char *response;
+  char *response_str = NULL;
+  int response_int = -1;
 
   // individual token request
   if (strcmp(p.cmd, "itr") == 0) {
-    response = send_receive_itr(sock_fd, p.id, p.nonce);
+    response_str = itr_operation(sock_fd, p.id, p.nonce);
   }
 
   // individual token validation
   else if (strcmp(p.cmd, "itv") == 0) {
-    response = send_receive_itv(sock_fd, p.sas);
+    response_int = itv_operation(sock_fd, p.sas);
   }
 
   // group token request
   else if (strcmp(p.cmd, "gtr") == 0) {
-    response = send_receive_gtr(sock_fd, p.sas_list, p.N);
+    response_str = gtr_operation(sock_fd, p.sas_list, p.N);
   }
 
   // group token validation
   else {
-    response = send_receive_gtv(sock_fd, p.gas);
+    response_int = gtv_operation(sock_fd, p.gas);
   }
 
   // print the response
-  if (response) {
-    printf("%s\n", response);
-    free(response);
+  if (response_str) {
+    printf("%s\n", response_str);
+    free(response_str);
+  } else if (response_int >= 0) {
+    printf("%d\n", response_int);
   } else {
-    log_exit("No response from server");
+    log_exit("Internal server error");
   }
 
   // free all dinamically alocated memory

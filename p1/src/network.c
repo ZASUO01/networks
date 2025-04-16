@@ -4,7 +4,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/socket.h>
 
 // try to convert the addr and port strings to a valid addr structure
 int parse_addr(const char *addr_str, const char *port_str,
@@ -42,4 +41,32 @@ int parse_addr(const char *addr_str, const char *port_str,
     return 0;
   }
   return -1;
+}
+
+uint16_t get_checksum(void *frame, size_t frame_size) {
+  // cast frame as bytes buffer
+  uint8_t *buf = (uint8_t *)frame;
+
+  // checksum as 4 byte to handle overflows
+  uint32_t sum = 0;
+
+  // iterate throught byte pairs and combine them into a 2 byte word
+  uint16_t word;
+  for (size_t i = 0; i < frame_size; i += 2) {
+    if (i + 1 < frame_size) {
+      word = (buf[i] << 8) | buf[i + 1];
+    } else {
+      word = (buf[i] << 8) | 0;
+    }
+
+    // add subsum
+    sum += word;
+
+    // handle carry
+    if (sum > 0xFFFF) {
+      sum = (sum & 0xFFFF) + (sum >> 16);
+    }
+  }
+
+  return (~sum) & 0xFFFF;
 }
