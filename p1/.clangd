@@ -1,4 +1,0 @@
-CompileFlags:
-  Add:
-    - "-I/home/pedrosouza/Documentos/projects/ufmg/networks/p1/include"
-    - "-Wno-pragma-pack"
