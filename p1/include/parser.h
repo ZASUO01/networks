@@ -1,8 +1,11 @@
+// file:        parser.h
+// description: definitions for the command line arguments parser
 #ifndef PARSER_H
 #define PARSER_H
 
 // command line arguments
 typedef struct {
+  int debug_mode;
   char *addr;
   char *port;
   char *gas;

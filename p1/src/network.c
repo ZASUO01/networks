@@ -1,5 +1,7 @@
 #include "network.h"
 #include <arpa/inet.h>
+#include <openssl/evp.h>
+#include <openssl/md5.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -69,4 +71,40 @@ uint16_t get_checksum(void *frame, size_t frame_size) {
   }
 
   return (~sum) & 0xFFFF;
+}
+
+// return the md5 hash from a string
+char *get_md5_str(const char *data) {
+  // get md5 digest
+  EVP_MD_CTX *ctx = EVP_MD_CTX_new();
+  if (!ctx)
+    return NULL;
+
+  unsigned char digest[EVP_MAX_MD_SIZE];
+  unsigned int digest_len;
+
+  if (EVP_DigestInit_ex(ctx, EVP_md5(), NULL) != 1 ||
+      EVP_DigestUpdate(ctx, data, strlen(data)) != 1 ||
+      EVP_DigestFinal_ex(ctx, digest, &digest_len) != 1) {
+    EVP_MD_CTX_free(ctx);
+    return NULL;
+  }
+
+  EVP_MD_CTX_free(ctx);
+
+  // Each digest byte will become a 2 char hexa
+  // 1 extra byte needed to \0
+  unsigned int hash_len = 2 * digest_len;
+  char *md5_string = malloc(hash_len + 1);
+  if (!md5_string)
+    return NULL;
+
+  // iterate through digest bytes
+  for (unsigned int i = 0; i < digest_len; ++i)
+    // set each 2 str chars as hexa from digest byte
+    sprintf(&md5_string[i * 2], "%02x", digest[i]);
+
+  // last str char
+  md5_string[hash_len] = '\0';
+  return md5_string;
 }

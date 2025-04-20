@@ -5,11 +5,12 @@ GAS = 2019035400:6:81f9721a4971e9b8ddf23847e3a374eda2b25c245e126ed058a4b17d7b852
  
 CC = gcc
 CFLAGS = -Wall -Wextra -Iinclude
-LDFLAGS = -lm -g
+LDFLAGS = -lm -lssl -lcrypto -g
 
 SRC = src
 BIN = bin
 OBJ = obj
+OUT = output
 
 ALL_SRCS = $(wildcard $(SRC)/*.c)
 MAIN_SRCS = $(SRC)/dccnet-md5.c $(SRC)/dccnet-xfer.c
@@ -30,11 +31,11 @@ $(XFER): $(OBJ)/dccnet-xfer.o $(AUX_OBJS) | $(BIN)
 $(OBJ)/%.o: $(SRC)/%.c | $(OBJ)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BIN) $(OBJ):
+$(BIN) $(OBJ) $(OUT):
 	mkdir -p $@
 
-test-md5: 
-	$(MD5) $(ADDR) $(PORT) $(GAS)
+test-md5: $(OUT) 
+	$(MD5) $(ADDR) $(PORT) $(GAS) -d
 
 mem-leak-md5: $(MD5)
 	valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes \
@@ -42,4 +43,4 @@ mem-leak-md5: $(MD5)
 
 
 clean:
-	rm -rf $(BIN) $(OBJ)
+	rm -rf $(BIN) $(OBJ) $(OUT)

@@ -1,3 +1,6 @@
+// file:        defs.h
+// description: definitions for the constants and main structs used by the
+// programs
 #ifndef DEFS_H
 #define DEFS_H
 
@@ -7,6 +10,7 @@
 #define SYNC_BYTES 0xDCC023C2
 #define FRAME_HEADER_BYTES 15
 #define MAX_DATA_BYTES 4096
+#define END_CHAR_BYTE 1
 
 // frame flags
 #define ACKNOWLEDGE_FLAG 0x80
@@ -19,7 +23,6 @@
 
 // transmission parameters
 #define MAX_ATTEMPTS 16
-#define SEND_TIMEOUT 1
 
 #pragma pack(1)
 
@@ -35,14 +38,5 @@ typedef struct {
 } Frame;
 
 #pragma pack(0)
-
-// dcc net messages control
-typedef struct {
-  int waiting_ack;
-  uint16_t current_id;
-  uint16_t last_id_sent;
-  uint16_t last_id_recv;
-  uint16_t last_cksum_recv;
-} MsgControl;
 
 #endif

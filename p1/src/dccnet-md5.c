@@ -1,16 +1,98 @@
 #include "defs.h"
+
 #include "messages.h"
+#include "msg-control.h"
 #include "network.h"
+#include "operations.h"
 #include "parser.h"
 #include "utils.h"
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <stddef.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
+
+// main function to perform this file task
+int dccnet_md5(int fd, const char *gas, size_t gas_size, FILE *output) {
+  LOG_MSG(LOG_INFO, "dccnet_md5(): init\n");
+
+  // init message control
+  init_msg_control(&msg_control);
+
+  // request structure
+  Frame req;
+  make_frame(&req, msg_control.current_id, NO_FLAGS, gas, gas_size, 1);
+  size_t req_size = FRAME_HEADER_BYTES + gas_size + END_CHAR_BYTE;
+
+  // response structure
+  Frame res;
+  size_t res_size = FRAME_HEADER_BYTES + MAX_DATA_BYTES;
+
+  // send request receive ack
+  if (send_frame_receive_ack(fd, &req, req_size) != 0) {
+    LOG_MSG(LOG_INFO, "dccnet_md5(): end with failure\n");
+    return -1;
+  }
+
+  // full line buffer
+  char full_msg[MAX_DATA_BYTES];
+  full_msg[0] = '\0';
+
+  // get lines until end receipt
+  while (msg_control.recv_end == 0) {
+    // try to get and handle the next response
+    if (handle_responses(fd, &res, res_size) != 0) {
+      LOG_MSG(LOG_INFO, "response not handled, retry...\n");
+      continue;
+    }
+
+    // concatenate the received msg
+    strcat(full_msg, msg_control.last_recv_data);
+
+    // check line end
+    size_t data_size = strlen(full_msg);
+    if (full_msg[data_size - 1] == '\n') {
+      // split msg in '\n'
+      char *sub_msg = strtok(full_msg, "\n");
+
+      // for each substring
+      while (sub_msg != NULL) {
+        // print line
+        fprintf(output, "%s\n", sub_msg);
+
+        // remove line break
+        // full_msg[data_size - 1] = '\0';
+        // data_size--;
+        data_size = strlen(sub_msg);
+
+        // get md5 hash
+        char *md5_hash = get_md5_str(sub_msg);
+        size_t hash_size = strlen(md5_hash);
+
+        // make request
+        make_frame(&req, msg_control.current_id, NO_FLAGS, md5_hash, hash_size,
+                   1);
+        req_size = FRAME_HEADER_BYTES + hash_size + END_CHAR_BYTE;
+
+        // send the md5 hash and receive ack
+        if (send_frame_receive_ack(fd, &req, req_size) != 0) {
+          return -1;
+        }
+
+        // get next split
+        sub_msg = strtok(NULL, "\n");
+      }
+      full_msg[0] = '\0';
+    }
+  }
+
+  LOG_MSG(LOG_INFO, "dccnet_md5(): end with success\n");
+  return 0;
+}
 
 int main(int argc, char **argv) {
   // parse arguments
@@ -31,69 +113,44 @@ int main(int argc, char **argv) {
 
   // set socket timeout
   struct timeval timeout;
-  timeout.tv_sec = 0;
-  timeout.tv_usec = 700000;
+  timeout.tv_sec = 1;
+  timeout.tv_usec = 0;
 
   if (setsockopt(sock_fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) <
       0) {
+    close(sock_fd);
     log_exit("Set socket timeout failure");
   }
 
   // connect to the server
   if (connect(sock_fd, server_addr, sizeof(storage)) != 0) {
+    close(sock_fd);
     log_exit("Server connection failure");
   }
 
-  // set network messages control values
-  msg_control.current_id = 0;
+  // set logger level
+  if (p.debug_mode) {
+    set_log_level(LOG_DEBUG);
+  }
 
-  // grading 1
+  // check if gas can be used
   size_t gas_size = strlen(p.gas);
   if (gas_size + 2 > MAX_DATA_BYTES) {
+    close(sock_fd);
     log_exit("GAS size exceeds maximum size");
   }
 
-  // full message from server
-  char *msg = "";
-
-  // request
-  Frame request;
-  make_frame(&request, 0, NO_FLAGS, p.gas, gas_size);
-  size_t req_size = FRAME_HEADER_BYTES + gas_size + 1;
-
-  // respose
-  Frame response;
-  size_t res_size = FRAME_HEADER_BYTES + MAX_DATA_BYTES;
-
-  int max_attempts = MAX_ATTEMPTS;
-  int total_attempts = 0;
-
-  ssize_t bytes_count;
-  while (total_attempts < max_attempts) {
-    total_attempts++;
-
-    bytes_count = send(sock_fd, &request, req_size, 0);
-    if (bytes_count < (ssize_t)req_size) {
-      log_exit("Send failure");
-    }
-
-    bytes_count = recv(sock_fd, &response, res_size, 0);
-    if (bytes_count > 0) {
-      if (htonl(response.SYNC1) != SYNC_BYTES ||
-          htonl(response.SYNC2) != SYNC_BYTES) {
-        log_exit("Invalid bytes");
-      }
-
-      if (response.flags == ACKNOWLEDGE_FLAG && response.id == request.id) {
-        print_frame(&response);
-        break;
-      }
-    }
+  FILE *output = fopen("output/dccnet-md5.txt", "w");
+  if (output == NULL) {
+    close(sock_fd);
+    log_exit("Failed to open output file");
   }
 
-  memset(&response, 0, res_size);
-  bytes_count = recv(sock_fd, &response, res_size, 0);
-  print_frame(&response);
+  // comunicate with server
+  if (dccnet_md5(sock_fd, p.gas, gas_size, output) != 0) {
+    close(sock_fd);
+    log_exit("Failed to receive lines from server");
+  }
 
   // close socket
   close(sock_fd);
