@@ -1,5 +1,5 @@
 // file:        messages.h
-// description: definitions for the messages exchanges
+// description: definitions for the messages operations
 #ifndef MESSAGES_H
 #define MESSAGES_H
 

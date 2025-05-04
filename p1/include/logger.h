@@ -1,7 +1,7 @@
-// file:        parser.h
+// file:        logger.h
 // description: definitions for loggers
-#ifndef UTILS_H
-#define UTILS_H
+#ifndef LOGGER_H
+#define LOGGER_H
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -12,6 +12,7 @@ typedef enum {
   LOG_INFO,
   LOG_WARNING,
   LOG_ERROR,
+  LOG_DISABLED,
 } LogLevel;
 
 #define LOG_MSG(level, fmt, ...) log_message(level, fmt, ##__VA_ARGS__)

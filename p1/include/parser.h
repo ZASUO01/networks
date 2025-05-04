@@ -9,6 +9,11 @@ typedef struct {
   char *addr;
   char *port;
   char *gas;
+  char *output_file;
+  char *input_file;
+  int client_side;
+  int server_side;
+  char *ip_version;
 } Params;
 
 // parse the command line arguments

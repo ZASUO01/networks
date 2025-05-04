@@ -1,17 +1,16 @@
 #include "network.h"
+#include "logger.h"
 #include <arpa/inet.h>
 #include <openssl/evp.h>
-#include <openssl/md5.h>
-#include <stdint.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-// try to convert the addr and port strings to a valid addr structure
-int parse_addr(const char *addr_str, const char *port_str,
-               struct sockaddr_storage *storage) {
+// init a server address with port
+// protocol can be v6 or v4
+int init_server_addr(const char *protocol, const char *port_str,
+                     struct sockaddr_storage *storage) {
   // can't parse null strings
-  if (addr_str == NULL || port_str == NULL) {
+  if (protocol == NULL || port_str == NULL) {
     return -1;
   }
 
@@ -20,7 +19,43 @@ int parse_addr(const char *addr_str, const char *port_str,
   if (port == 0) {
     return -1;
   }
+  port = htons(port);
 
+  // get the addr for the given protocol
+  if (strcmp(protocol, "v4") == 0) {
+    struct sockaddr_in *addr4 = (struct sockaddr_in *)storage;
+    addr4->sin_addr.s_addr = INADDR_ANY;
+    addr4->sin_port = port;
+    addr4->sin_family = AF_INET;
+    return 0;
+  } else if (strcmp(protocol, "v6") == 0) {
+    struct sockaddr_in6 *addr6 = (struct sockaddr_in6 *)storage;
+    addr6->sin6_addr = in6addr_any;
+    addr6->sin6_port = port;
+    addr6->sin6_family = AF_INET6;
+    return 0;
+  }
+
+  return -1;
+}
+
+// try to convert the addr and port strings to a valid addr structure
+int parse_addr(const char *addr_str, const char *port_str,
+               struct sockaddr_storage *storage) {
+  LOG_MSG(LOG_INFO, "parse_addr(): start");
+
+  // can't parse null strings
+  if (addr_str == NULL || port_str == NULL) {
+    LOG_MSG(LOG_ERROR, "parse_addr(): empty addr or port");
+    return -1;
+  }
+
+  // parse the port
+  uint16_t port = (uint16_t)atoi(port_str);
+  if (port == 0) {
+    LOG_MSG(LOG_ERROR, "parse_addr(): failed to parse port");
+    return -1;
+  }
   port = htons(port);
 
   // try to parse IPv4
@@ -30,6 +65,8 @@ int parse_addr(const char *addr_str, const char *port_str,
     addr4->sin_addr = in_addr4;
     addr4->sin_port = port;
     addr4->sin_family = AF_INET;
+
+    LOG_MSG(LOG_INFO, "parse_addr(): complete with ipv4");
     return 0;
   }
 
@@ -40,11 +77,16 @@ int parse_addr(const char *addr_str, const char *port_str,
     memcpy(&(addr6->sin6_addr), &in_addr6, sizeof(in_addr6));
     addr6->sin6_port = port;
     addr6->sin6_family = AF_INET6;
+
+    LOG_MSG(LOG_INFO, "parse_addr(): complete with ipv6");
     return 0;
   }
+
+  LOG_MSG(LOG_ERROR, "parse_addr(): failed");
   return -1;
 }
 
+// internet checksum algorithm
 uint16_t get_checksum(void *frame, size_t frame_size) {
   // cast frame as bytes buffer
   uint8_t *buf = (uint8_t *)frame;

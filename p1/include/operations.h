@@ -3,11 +3,22 @@
 #ifndef OPERATIONS_H
 #define OPERATIONS_H
 
-#include "defs.h"
 #include <stdio.h>
-#include <stdlib.h>
 
-int send_frame_receive_ack(int fd, Frame *req, size_t req_size);
-int handle_responses(int fd, Frame *res, size_t res_size);
+// thread arguments
+typedef struct {
+  int fd;
+  FILE *input;
+  FILE *output;
+  char *gas;
+  size_t gas_size;
+} ThreadArgs;
+
+// thread functions
+void *send_md5_thread(void *arg);
+void *send_xfer_thread(void *arg);
+void *receive_thread(void *arg);
+void *ack_xfer_thread(void *arg);
+void *print_thread(void *arg);
 
 #endif

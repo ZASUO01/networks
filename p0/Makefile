@@ -1,7 +1,7 @@
-ADDR =  
-ADDR1 = 
-PORT =  
-COMMAND = 
+ADDR =150.164.213.243 
+ADDR1 = 2804:1f4a:dcc:ff03::1
+PORT = 51001 
+COMMAND = gtr 1 2021039883:1:705e2ad17eb257f88670a5be2d5be59af2312c73aef08ed205ae8f1713b61b25
 
 CC = gcc
 CFLAGS = -Wall -Wextra -Iinclude

@@ -1,8 +1,13 @@
+#include "defs.h"
+#include "logger.h"
 #include "network.h"
-#include "utils.h"
 #include <arpa/inet.h>
 #include <messages.h>
+#include <pthread.h>
+#include <stdint.h>
+#include <stdio.h>
 #include <string.h>
+#include <sys/select.h>
 #include <sys/socket.h>
 
 // make a valid frame
@@ -28,10 +33,8 @@ void make_frame(Frame *f, uint16_t id, uint8_t flags, const char *data,
       frame_size += 1;
 
       f->data[data_size] = '\n';
-      f->data[data_size + 1] = '\0';
     } else {
       f->lenght = htons(data_size);
-      f->data[data_size] = '\0';
     }
   } else {
     f->lenght = 0;
@@ -49,96 +52,152 @@ void make_frame(Frame *f, uint16_t id, uint8_t flags, const char *data,
 
 // check if a frame is valid
 static int check_valid_frame(Frame *f) {
-  LOG_MSG(LOG_INFO, "check_valid_frame(): init\n");
+  // frame variables to little-endian
+  uint32_t _sync1 = ntohl(f->SYNC1);
+  uint32_t _sync2 = ntohl(f->SYNC2);
+  uint16_t _id = ntohs(f->id);
+  uint16_t _lenght = ntohs(f->lenght);
+  uint16_t _checksum = ntohs(f->checksum);
+
+  LOG_MSG(LOG_INFO, "check_valid_frame(id = %hd): start", _id);
 
   // check sync bytes
-  if (ntohl(f->SYNC1) != SYNC_BYTES || ntohl(f->SYNC2) != SYNC_BYTES) {
-    LOG_MSG(LOG_ERROR, "check_valid_frame(): end with invalid sync\n");
+  if (_sync1 != SYNC_BYTES || _sync2 != SYNC_BYTES) {
+    LOG_MSG(LOG_ERROR, "check_valid_frame(id = %hd): invalid sync bytes %x %x",
+            _id, _sync1, _sync2);
     return -1;
   }
-
-  uint16_t len = ntohs(f->lenght);
-  uint16_t id = ntohs(f->id);
 
   // check length
-  if (len > MAX_DATA_BYTES) {
-    LOG_MSG(LOG_ERROR, "check_valid_frame(): end with invalid length: %d\n",
-            len);
+  if (_lenght > MAX_DATA_BYTES) {
+    LOG_MSG(LOG_ERROR, "check_valid_frame(id = %hd): invalid data size", _id);
     return -1;
   }
 
-  // check checksum
+  // make a temp frame to compare checksum
   Frame temp;
 
-  if (len > 0) {
-    char *data = malloc(len + 1);
+  if (_lenght > 0) {
+    char *data = malloc(_lenght + 1);
     data = strdup(f->data);
-    data[len] = '\0';
+    data[_lenght] = '\0';
 
-    if (data[len - 1] == '\n') {
-      data[len - 1] = '\0';
-      make_frame(&temp, id, f->flags, data, len - 1, 1);
+    if (data[_lenght - 1] == '\n') {
+      data[_lenght - 1] = '\0';
+      make_frame(&temp, _id, f->flags, data, _lenght - 1, 1);
     } else {
-      make_frame(&temp, id, f->flags, data, len, 0);
+      make_frame(&temp, _id, f->flags, data, _lenght, 0);
     }
 
     free(data);
   } else {
-    make_frame(&temp, id, f->flags, NULL, 0, 0);
+    make_frame(&temp, _id, f->flags, NULL, 0, 0);
   }
 
-  if (f->checksum != temp.checksum) {
+  uint16_t tmp_checksum = ntohs(temp.checksum);
+  if (_checksum != tmp_checksum) {
     LOG_MSG(LOG_ERROR,
-            "check_valid_frame(): end with invalid checksum %d != %d\n",
-            f->checksum, temp.checksum);
+            "check_valid_frame(id = %hd): invalid checksum %hd != %hd", _id,
+            _checksum, tmp_checksum);
     return -1;
   }
 
   // valid frame
-  LOG_MSG(LOG_INFO, "check_valid_frame(): end with valid frame\n");
+  LOG_MSG(LOG_INFO, "check_valid_frame(id = %hd): complete", _id);
   return 0;
 }
 
 // send a frame to server
 int send_frame(int fd, Frame *f, size_t f_size) {
-  LOG_MSG(LOG_INFO, "send_frame(): init\n");
+  // frame variables to little-endian
+  uint16_t _id = ntohs(f->id);
 
-  // try to send the frame
-  ssize_t bytes_count = send(fd, f, f_size, 0);
-  if (bytes_count != (ssize_t)f_size) {
-    LOG_MSG(LOG_ERROR, "send_frame(): end with send failure\n");
-    return -1;
+  LOG_MSG(LOG_INFO, "send_frame(id = %hd): start", _id);
+  ssize_t bytes_sent = 0;
+  ssize_t bytes_count;
+
+  // bytes are possibly sent partially
+  while (bytes_sent < (ssize_t)f_size) {
+    // set socket for select and timeout
+    fd_set writefds;
+    FD_ZERO(&writefds);
+    FD_SET(fd, &writefds);
+    struct timeval timeout;
+    timeout.tv_sec = SEND_TIMEOUT;
+    timeout.tv_usec = 0;
+
+    int retval = select(fd + 1, NULL, &writefds, NULL, &timeout);
+    // socket not ready
+    if (retval <= 0) {
+      LOG_MSG(LOG_ERROR, "send_frame(id = %hd): socket not ready to send", _id);
+      return -1;
+    }
+
+    // socket ready
+    if (FD_ISSET(fd, &writefds)) {
+      bytes_count = send(fd, f + bytes_sent, f_size - bytes_sent, 0);
+      if (bytes_count <= 0) {
+        LOG_MSG(LOG_ERROR, "send_frame(id = %hd): no bytes sent", _id);
+        return -1;
+      }
+      bytes_sent += bytes_count;
+      LOG_MSG(LOG_INFO, "send_frame(id = %hd): %ld bytes sent of %ld", _id,
+              bytes_sent, f_size);
+    }
   }
 
-  LOG_MSG(LOG_INFO, "send_frame(): end with %ld bytes sent\n", bytes_count);
+  // all bytes sent
+  LOG_MSG(LOG_INFO, "send_frame(id = %hd): complete", _id);
   return 0;
 }
 
 // receive bytes and check if its a frame
 int receive_frame(int fd, Frame *f, size_t f_size) {
-  LOG_MSG(LOG_INFO, "receive_frame(): init\n");
+  // frame variables to little endian
+  uint16_t _id = ntohs(f->id);
 
+  LOG_MSG(LOG_INFO, "receive_frame(id = %hd): start", _id);
   // set bytes
   memset(f, 0, f_size);
 
-  // try to receive frame
-  ssize_t bytes_count = recv(fd, f, f_size, 0);
+  // set socket and timeout for select
+  fd_set readfds;
+  FD_ZERO(&readfds);
+  FD_SET(fd, &readfds);
+  struct timeval timeout;
+  timeout.tv_sec = RECV_TIMEOUT;
+  timeout.tv_usec = 0;
 
-  // received bytes
-  if (bytes_count > 0) {
-    LOG_MSG(LOG_INFO, "%ld bytes received\n", bytes_count);
+  int retval = select(fd + 1, &readfds, NULL, NULL, &timeout);
+  // socket not ready
+  if (retval <= 0) {
+    LOG_MSG(LOG_ERROR, "receive_frame(id = %hd): socket not ready to receive",
+            _id);
+    return -1;
+  }
 
-    // check if it's a valid frame
-    if (check_valid_frame(f) != 0) {
-      LOG_MSG(LOG_ERROR, "receive_frame(): end with invalid receipt\n");
+  // socket ready
+  if (FD_ISSET(fd, &readfds)) {
+    ssize_t bytes_count = recv(fd, f, f_size, 0);
+
+    // no bytes received
+    if (bytes_count <= 0) {
+      LOG_MSG(LOG_ERROR, "receive_frame(id = %hd): no bytes received", _id);
       return -1;
     }
 
-    LOG_MSG(LOG_INFO, "receive_frame(): end with valid receipt\n");
+    // invalid frame
+    if (check_valid_frame(f) != 0) {
+      LOG_MSG(LOG_ERROR, "receive_frame(id = %hd): received invalid frame",
+              _id);
+      return -1;
+    }
+
+    // received valid frame
+    LOG_MSG(LOG_INFO, "receive_frame(id = %hd): complete", _id);
     return 0;
   }
 
-  // no response
-  LOG_MSG(LOG_ERROR, "receive_frame(): end with receipt failure\n");
+  // receipt failure
   return -1;
 }

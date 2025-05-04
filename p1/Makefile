@@ -1,8 +1,13 @@
-ADDR = 150.164.213.243
-ADDR1 = 2804:1f4a:dcc:ff03::1
-PORT = 51510
-GAS = 2019035400:6:81f9721a4971e9b8ddf23847e3a374eda2b25c245e126ed058a4b17d7b852209+fcafd0e13cc284dea86db12d1bf37540b55efb0eab9d0ab279d80c9558cc1368
- 
+# FILL THE PROGRAM VARIABLES HERE ------
+ADDR4 = 
+ADDR6 = 
+PORT = 
+LOCAL_ADDR4 = 
+LOCAL_ADDR6 = 
+LOCAL_PORT = 
+GAS = 
+
+# RULES --------------------------------
 CC = gcc
 CFLAGS = -Wall -Wextra -Iinclude
 LDFLAGS = -lm -lssl -lcrypto -g
@@ -32,15 +37,39 @@ $(OBJ)/%.o: $(SRC)/%.c | $(OBJ)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BIN) $(OBJ) $(OUT):
+	rm -rf $@
 	mkdir -p $@
 
-test-md5: $(OUT) 
-	$(MD5) $(ADDR) $(PORT) $(GAS) -d
+md5-4: $(OUT)
+	$(MD5) $(ADDR4):$(PORT) $(GAS) $(OUT)/md5_out.txt
 
-mem-leak-md5: $(MD5)
-	valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes \
-	$(MD5) $(ADDR) $(PORT) $(GAS)
+md5-6: $(OUT)
+	$(MD5) $(ADDR6):$(PORT) $(GAS) $(OUT)/md5_out.txt
 
+xfer-c-4: $(OUT)
+	$(XFER) -c $(LOCAL_ADDR4):$(LOCAL_PORT) client_input.txt $(OUT)/client_output.txt v4
+
+xfer-s-4: $(OUT)
+	$(XFER) -s $(LOCAL_PORT) server_input.txt $(OUT)/server_output.txt v4
+
+xfer-c-6: $(OUT)
+	$(XFER) -c $(LOCAL_ADDR6):$(LOCAL_PORT) client_input.txt $(OUT)/client_output.txt v6
+
+xfer-s-6: $(OUT)
+	$(XFER) -s $(LOCAL_PORT) server_input.txt $(OUT)/server_output.txt v6
+
+
+test-md5-4: $(OUT)
+	$(MD5) $(ADDR4):$(PORT) $(GAS) $(OUT)/md5_out.txt -d
+
+test-md5-6: $(OUT)
+	$(MD5) $(ADDR6):$(PORT) $(GAS) $(OUT)/md5_out.txt -d
+
+test-xfer-s: $(OUT)
+	$(XFER) -s $(LOCAL_PORT) server_input.txt $(OUT)/server_output.txt v6 -d 
+
+test-xfer-c: $(OUT)
+	$(XFER) -c $(LOCAL_ADDR6):$(LOCAL_PORT) client_input.txt $(OUT)/client_output.txt -d
 
 clean:
 	rm -rf $(BIN) $(OBJ) $(OUT)

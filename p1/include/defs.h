@@ -6,10 +6,10 @@
 
 #include <stdint.h>
 
-// byte sizes
+// frame byte sizes
 #define SYNC_BYTES 0xDCC023C2
 #define FRAME_HEADER_BYTES 15
-#define MAX_DATA_BYTES 4096
+#define MAX_DATA_BYTES 1000
 #define END_CHAR_BYTE 1
 
 // frame flags
@@ -18,11 +18,10 @@
 #define RESET_FLAG 0x20
 #define NO_FLAGS 0x00
 
-// special ids
-#define RESET_ID 0xFFFF
-
 // transmission parameters
 #define MAX_ATTEMPTS 16
+#define SEND_TIMEOUT 3
+#define RECV_TIMEOUT 3
 
 #pragma pack(1)
 
