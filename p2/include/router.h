@@ -21,6 +21,7 @@ typedef struct {
   char dest_ip[MAX_IP];
   char via_ip[MAX_IP];
   int cost;
+  time_t timestamp;
 } Route;
 
 typedef struct {

@@ -78,6 +78,7 @@ void add_neighbor(Router *rt, const char *ip, int weight) {
     strcpy(rt->routes[rt->routes_count].dest_ip, ip);
     strcpy(rt->routes[rt->routes_count].via_ip, ip);
     rt->routes[rt->routes_count].cost = weight;
+    rt->routes[rt->routes_count].timestamp = time(NULL);
 
     if (rt->routes_count < MAX_ROUTES - 1) {
       rt->routes_count++;
@@ -362,6 +363,7 @@ void process_update(Router *rt, cJSON *msg) {
   }
 
   // update or add other routes
+  time_t timestamp_now = time(NULL);
   cJSON_ArrayForEach(dest, distances) {
     if (strcmp(dest->string, sender) != 0) {
       int route_idx = find_single_route(rt, sender, dest->string);
@@ -370,6 +372,7 @@ void process_update(Router *rt, cJSON *msg) {
         strcpy(rt->routes[rt->routes_count].via_ip, sender);
         strcpy(rt->routes[rt->routes_count].dest_ip, dest->string);
         rt->routes[rt->routes_count].cost = sender_weight + dest->valueint;
+        rt->routes[rt->routes_count].timestamp = timestamp_now;
 
         if (rt->routes_count < MAX_ROUTES - 1) {
           rt->routes_count++;
@@ -378,7 +381,23 @@ void process_update(Router *rt, cJSON *msg) {
       // update route
       else {
         rt->routes[route_idx].cost = sender_weight + dest->valueint;
+        rt->routes[route_idx].timestamp = timestamp_now;
       }
+    }
+  }
+
+  // delete obsolete routes
+  for (int i = 0; i < rt->routes_count;) {
+    if (strcmp(rt->routes[i].via_ip, sender) == 0 &&
+        strcmp(rt->routes[i].dest_ip, sender) != 0 &&
+        rt->routes[i].timestamp < timestamp_now) {
+
+      for (int j = i; j < rt->routes_count - 1; j++) {
+        rt->routes[j] = rt->routes[j + 1];
+      }
+      rt->routes_count--;
+    } else {
+      i++;
     }
   }
 
